@@ -27,7 +27,7 @@ def resize_sprite(image, scale_factor):
 level1_sprite = resize_sprite(pygame.image.load('buttons/level1.png'), 0.5)
 level2_sprite = resize_sprite(pygame.image.load('buttons/level2.png'), 0.5)
 level3_sprite = resize_sprite(pygame.image.load('buttons/level3.png'), 0.5)
-back_sprite = resize_sprite(pygame.image.load('buttons/backer.png'), 0.3)  # Assuming you have a back.png sprite
+back_sprite = resize_sprite(pygame.image.load('buttons/backer.png'), 0.3)
 
 # Define button class
 class Button:
