@@ -1,110 +1,174 @@
 import pygame
+from pygame.locals import *
 import sys
 
 pygame.init()
 
-width, height = 800, 600
-screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption('Game')
+clock = pygame.time.Clock()
+fps = 60
 
-# colors
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
+screen_width = 800
+screen_height = 600
 
-# Define font
-font = pygame.font.Font(None, 36)
+screen = pygame.display.set_mode((screen_width, screen_height))
+pygame.display.set_caption('Platformer')
 
-# Function to resize sprite
-def resize_sprite(image, scale_factor):
-    original_rect = image.get_rect()
-    scaled_size = (int(original_rect.width * scale_factor), int(original_rect.height * scale_factor))
-    return pygame.transform.scale(image, scaled_size)
+# define game variables
+tile_size = 50
+font = pygame.font.SysFont(None, 55)
 
-# making the buttons fit the screen
-level1_sprite = resize_sprite(pygame.image.load('buttons/level1.png'), 0.5)
-level2_sprite = resize_sprite(pygame.image.load('buttons/level2.png'), 0.5)
-level3_sprite = resize_sprite(pygame.image.load('buttons/level3.png'), 0.5)
-back_sprite = resize_sprite(pygame.image.load('buttons/backer.png'), 0.3)  
+# load images
+bg_img = pygame.image.load('Background/realbg.jpg')
 
-# Define button class
-class Button:
-    def __init__(self, x, y, sprite, action=None):
-        self.sprite = sprite
-        self.rect = sprite.get_rect(topleft=(x, y))
-        self.action = action
+class Player():
+    def __init__(self, x, y):
+        self.images_right = []
+        self.images_left = []
+        self.index = 0
+        self.counter = 0
+        for num in range(1, 5):
+            img_right = pygame.image.load('Background/character.png')
+            img_right = pygame.transform.scale(img_right, (30, 60))
+            img_left = pygame.transform.flip(img_right, True, False)
+            self.images_right.append(img_right)
+            self.images_left.append(img_left)
+        self.image = self.images_right[self.index]
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y - self.rect.height  # Adjusted the initial y position
+        self.width = self.image.get_width()
+        self.height = self.image.get_height()
+        self.vel_y = 0
+        self.jumped = False
+        self.direction = 0
 
-    def draw(self, win):
-        win.blit(self.sprite, self.rect)
+    def update(self):
+        dx = 0
+        dy = 0
+        walk_cooldown = 5
 
-    def is_clicked(self, pos):
-        return self.rect.collidepoint(pos)
+        # get keypresses
+        key = pygame.key.get_pressed()
+        if key[pygame.K_SPACE] and not self.jumped:
+            self.vel_y = -15
+            self.jumped = True
+        if not key[pygame.K_SPACE]:
+            self.jumped = False
+        if key[pygame.K_LEFT]:
+            dx -= 5
+            self.counter += 1
+            self.direction = -1
+        if key[pygame.K_RIGHT]:
+            dx += 5
+            self.counter += 1
+            self.direction = 1
+        if not key[pygame.K_LEFT] and not key[pygame.K_RIGHT]:
+            self.counter = 0
+            self.index = 0
+            if self.direction == 1:
+                self.image = self.images_right[self.index]
+            if self.direction == -1:
+                self.image = self.images_left[self.index]
 
-    def execute_action(self):
-        if self.action:
-            self.action()
+        # handle animation
+        if self.counter > walk_cooldown:
+            self.counter = 0
+            self.index += 1
+            if self.index >= len(self.images_right):
+                self.index = 0
+            if self.direction == 1:
+                self.image = self.images_right[self.index]
+            if self.direction == -1:
+                self.image = self.images_left[self.index]
 
-# Define actions for each button
-def level_1_action():
-    global game_active, current_world
-    game_active = True
-    current_world = setup_level(1)
-    print("Level 1 selected")
+        # add gravity
+        self.vel_y += 1
+        if self.vel_y > 10:
+            self.vel_y = 10
+        dy += self.vel_y
 
-def level_2_action():
-    global game_active, current_world
-    game_active = True
-    current_world = setup_level(2)
-    print("Level 2 selected")
+        # check for collision, excluding tile 4
+        for tile in world.tile_list:
+            if tile[1].colliderect(self.rect.x + dx, self.rect.y, self.width, self.height) and tile[2] != 4:
+                dx = 0
+            if tile[1].colliderect(self.rect.x, self.rect.y + dy, self.width, self.height) and tile[2] != 4:
+                if self.vel_y < 0:
+                    dy = tile[1].bottom - self.rect.top
+                    self.vel_y = 0
+                elif self.vel_y >= 0:
+                    dy = tile[1].top - self.rect.bottom
+                    self.vel_y = 0
 
-def level_3_action():
-    global game_active, current_world
-    game_active = True
-    current_world = setup_level(3)
-    print("Level 3 selected")
+                # check for collision with water (tile 3)
+                if tile[2] == 3:
+                    game_over_text = font.render('Game Over!', True, (255, 0, 0))
+                    screen.blit(game_over_text, (screen_width // 2 - 100, screen_height // 2))
+                    pygame.display.update()
+                    pygame.time.delay(2000)  # Display the text for 2 seconds
+                    pygame.quit()
+                    sys.exit()
 
-def back_action():
-    global game_active
-    game_active = False
-    print("Back to the main menu")
+        # check for winning condition (reaching the door)
+        if self.rect.colliderect(world.door_rect) and not self.jumped:
+            you_win_text = font.render('You Win!', True, (255, 255, 255))
+            screen.blit(you_win_text, (screen_width // 2 - 100, screen_height // 2))
+            pygame.display.update()
+            pygame.time.delay(2000)  # Display the text for 2 seconds
+            pygame.quit()
+            sys.exit()
 
-# Create buttons
-buttons = [
-    Button(50, 250, level1_sprite, level_1_action),
-    Button(300, 250, level2_sprite, level_2_action),
-    Button(550, 250, level3_sprite, level_3_action),
-    Button(10, 10, back_sprite, back_action)  # Back button at the top left
-]
+        # check for collision with the enemy
+        if pygame.sprite.spritecollide(self, world.enemy_list, False):
+            game_over_text = font.render('Game Over!', True, (255, 0, 0))
+            screen.blit(game_over_text, (screen_width // 2 - 100, screen_height // 2))
+            pygame.display.update()
+            pygame.time.delay(2000)  # Display the text for 2 seconds
+            pygame.quit()
+            sys.exit()
 
-# Game active flag
-game_active = False
+        # update player coordinates
+        self.rect.x += dx
+        self.rect.y += dy
 
-# Function to set up the level based on the level index
-def setup_level(level_index):
-    if level_index == 1:
-        return World(level_1_data)
+        if self.rect.bottom > screen_height:
+            self.rect.bottom = screen_height
+            dy = 0
 
-# Function to render the current level
-def render_level():
-    screen.blit(bg_img, (0, 0))
-    current_world.draw()
-    draw_grid()
+        # draw player onto the screen
+        screen.blit(self.image, self.rect)
 
-# Function to draw grid lines
-def draw_grid():
-    for line in range(0, 20):
-        pygame.draw.line(screen, WHITE, (0, line * tile_size), (width, line * tile_size))
-        pygame.draw.line(screen, WHITE, (line * tile_size, 0), (line * tile_size, height))
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.image.load('Background/monster.png')  # Change to the actual enemy image
+        self.image = pygame.transform.scale(self.image, (20, 40))  # Scale down the monster
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.move_direction = 1
+        self.move_counter = 0
+        self.movement_range = 100  # Adjust the range the enemy moves left and right
 
-# world class
-class World:
+    def update(self):
+        movement_speed = 2  # Adjust the speed of the enemy's movement
+
+        self.rect.x += self.move_direction * movement_speed
+        self.move_counter += movement_speed
+        if abs(self.move_counter) > self.movement_range:
+            self.move_direction *= -1
+            self.move_counter *= -1
+
+class World():
     def __init__(self, data):
         self.tile_list = []
+        self.enemy_list = pygame.sprite.Group()
 
+        # load images
         dirt_img = pygame.image.load('Background/dirt.png')
         grass_img = pygame.image.load('Background/grass.jpg')
         water_img = pygame.image.load('Background/water.png')
-        
+        door_img = pygame.image.load('Background/door.png')
+
         row_count = 0
         for row in data:
             col_count = 0
@@ -114,108 +178,77 @@ class World:
                     img_rect = img.get_rect()
                     img_rect.x = col_count * tile_size
                     img_rect.y = row_count * tile_size
-                    tile = (img, img_rect)
+                    tile = (img, img_rect, 1)  # 1 represents dirt
                     self.tile_list.append(tile)
-                if tile == 2:
+                elif tile == 2:
                     img = pygame.transform.scale(grass_img, (tile_size, tile_size))
                     img_rect = img.get_rect()
                     img_rect.x = col_count * tile_size
                     img_rect.y = row_count * tile_size
-                    tile = (img, img_rect)
+                    tile = (img, img_rect, 2)  # 2 represents grass
                     self.tile_list.append(tile)
-                if tile == 3:
+                elif tile == 3:
                     img = pygame.transform.scale(water_img, (tile_size, tile_size))
                     img_rect = img.get_rect()
                     img_rect.x = col_count * tile_size
                     img_rect.y = row_count * tile_size
-                    tile = (img, img_rect)
+                    tile = (img, img_rect, 3)  # 3 represents water
                     self.tile_list.append(tile)
+                elif tile == 4:
+                    img = pygame.transform.scale(door_img, (200, 150))
+                    img_rect = img.get_rect()
+                    img_rect.x = col_count * tile_size
+                    img_rect.y = row_count * tile_size
+                    tile = (img, img_rect, 4)  # 4 represents door
+                    self.tile_list.append(tile)
+                    self.door_rect = img_rect  # store the door rectangle separately
+                elif tile == 5:
+                    enemy = Enemy(col_count * tile_size, row_count * tile_size)
+                    self.enemy_list.add(enemy)
                 col_count += 1
             row_count += 1
 
     def draw(self):
         for tile in self.tile_list:
             screen.blit(tile[0], tile[1])
+        self.enemy_list.draw(screen)
 
-    def is_collision(self, rect):
-        for tile in self.tile_list:
-            if tile[1].colliderect(rect):
-                return True
-        return False
-
-# Level 1
+# Define the new level 1 map
 level_1_data = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-    [1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-    [1, 2, 2, 2, 0, 2, 2, 0, 0, 2, 2, 2, 2, 2, 0, 0], 
-    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 7, 0, 2], 
-    [1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 2, 2, 2, 0, 0], 
-    [1, 7, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0], 
-    [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
-    [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 7, 0], 
-    [1, 0, 4, 0, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0], 
-    [1, 0, 4, 4, 0, 0, 4, 4, 4, 0, 0, 4, 0, 0, 4, 0], 
-    [1, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2], 
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 2, 2, 2, 0, 2, 2, 2, 0, 2, 2, 2, 2, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
+    [1, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 0, 0],
+    [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0],
+    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2],
 ]
 
+player = Player(screen_width - 50, screen_height - 80)  # Adjusted the initial position
+world = World(level_1_data)
 
-bg_img = pygame.image.load('Background/realbg.jpg')
+run = True
+while run:
+    clock.tick(fps)
 
+    screen.blit(bg_img, (0, 0))
 
-tile_size = 50
+    world.draw()
+    player.update()
 
-# This is just a place holder for the character ill get the sprite later
-player = pygame.Rect(width - tile_size, height - 2 * tile_size, tile_size, tile_size)
+    for enemy in world.enemy_list:
+        enemy.update()
 
-# Current world variable
-current_world = None
-
-# Main loop
-running = True
-while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            pos = pygame.mouse.get_pos()
-            for button in buttons:
-                if button.is_clicked(pos):
-                    button.execute_action()
+            run = False
 
-    keys = pygame.key.get_pressed()
-    if game_active:
-        if keys[pygame.K_w]:
-            player.y -= 5
-            if current_world.is_collision(player):
-                player.y += 5
-        if keys[pygame.K_s]:
-            player.y += 5
-            if current_world.is_collision(player):
-                player.y -= 5
-        if keys[pygame.K_a]:
-            player.x -= 5
-            if current_world.is_collision(player):
-                player.x += 5
-        if keys[pygame.K_d]:
-            player.x += 5
-            if current_world.is_collision(player):
-                player.x -= 5
-
-    screen.fill(BLACK)
-
-    if not game_active:
-        title_surf = font.render('My nice game', True, WHITE)
-        screen.blit(title_surf, (width // 2 - title_surf.get_width() // 2, 50))
-
-        for button in buttons[:-1]:
-            button.draw(screen)
-    else:
-        render_level()
-        pygame.draw.rect(screen, RED, player)
-        buttons[-1].draw(screen)
-
-    pygame.display.flip()
+    pygame.display.update()
 
 pygame.quit()
+sys.exit()
